@@ -3,6 +3,7 @@
 
 #include <geometry_msgs/Vector3Stamped.h>
 #include <kr_mav_msgs/OutputData.h>
+#include <kr_mav_msgs/PositionCommand.h>
 #include <kr_quadrotor_simulator/Quadrotor.h>
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
@@ -21,6 +22,7 @@ class QuadrotorSimulatorBase
   void run(void);
   void extern_force_callback(const geometry_msgs::Vector3Stamped::ConstPtr &f_ext);
   void extern_moment_callback(const geometry_msgs::Vector3Stamped::ConstPtr &m_ext);
+  void set_state_callback(const kr_mav_msgs::PositionCommand::ConstPtr &cmd);
 
  protected:
   typedef struct _ControlInput
@@ -53,6 +55,7 @@ class QuadrotorSimulatorBase
   ros::Publisher pub_odom_;
   ros::Publisher pub_imu_;
   ros::Publisher pub_output_data_;
+  ros::Subscriber sub_set_state_;
   ros::Subscriber sub_cmd_;
   ros::Subscriber sub_extern_force_;
   ros::Subscriber sub_extern_moment_;
@@ -71,6 +74,8 @@ QuadrotorSimulatorBase<T, U>::QuadrotorSimulatorBase(ros::NodeHandle &n)
   pub_output_data_ = n.advertise<kr_mav_msgs::OutputData>("output_data", 100);
   sub_cmd_ =
       n.subscribe<T>("cmd", 100, &QuadrotorSimulatorBase::cmd_callback, this, ros::TransportHints().tcpNoDelay());
+  sub_set_state_ = n.subscribe<kr_mav_msgs::PositionCommand>(
+      "set_state", 100, &QuadrotorSimulatorBase::set_state_callback, this, ros::TransportHints().tcpNoDelay());
   sub_extern_force_ = n.subscribe<geometry_msgs::Vector3Stamped>(
       "extern_force", 10, &QuadrotorSimulatorBase::extern_force_callback, this, ros::TransportHints().tcpNoDelay());
   sub_extern_moment_ = n.subscribe<geometry_msgs::Vector3Stamped>(
@@ -84,7 +89,8 @@ QuadrotorSimulatorBase<T, U>::QuadrotorSimulatorBase(ros::NodeHandle &n)
   n.param("world_frame_id", world_frame_id_, std::string("simulator"));
   n.param("quadrotor_name", quad_name_, std::string("quadrotor"));
 
-  auto get_param = [&n](const std::string &param_name) {
+  auto get_param = [&n](const std::string &param_name)
+  {
     double param;
     if(!n.hasParam(param_name))
     {
@@ -125,13 +131,11 @@ QuadrotorSimulatorBase<T, U>::QuadrotorSimulatorBase(ros::NodeHandle &n)
   double yaw;
   n.param("initial_yaw", yaw, 10.0);
 
-
-  if (abs(yaw) <= M_PI){
-    initial_q = Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX())
-                * Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitY())
-                * Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
+  if(abs(yaw) <= M_PI)
+  {
+    initial_q = Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX()) * Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitY()) *
+                Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
   }
-
 
   initial_q.normalize();
 
@@ -203,6 +207,25 @@ void QuadrotorSimulatorBase<T, U>::run(void)
 
     r.sleep();
   }
+}
+
+template <typename T, typename U>
+void QuadrotorSimulatorBase<T, U>::set_state_callback(const kr_mav_msgs::PositionCommand::ConstPtr &cmd)
+{
+  Quadrotor::State state = quad_.getState();
+  state.x(0) = cmd->position.x;
+  state.x(1) = cmd->position.y;
+  state.x(2) = cmd->position.z;
+  state.v(0) = cmd->velocity.x;
+  state.v(1) = cmd->velocity.y;
+  state.v(2) = cmd->velocity.z;
+  Eigen::AngleAxisd pose(cmd->yaw, Eigen::Vector3d::UnitZ());
+  state.R = pose.matrix();
+  state.omega(0) = 0.0;
+  state.omega(1) = 0.0;
+  state.omega(2) = cmd->yaw_dot;
+
+  quad_.setState(state);
 }
 
 template <typename T, typename U>

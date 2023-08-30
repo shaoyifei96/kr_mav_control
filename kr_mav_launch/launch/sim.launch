@@ -34,6 +34,7 @@
     <remap from="~odom" to="$(arg odom_topic)"/>
     <remap from="~imu" to="imu"/>
     <remap from="~cmd" to="so3_cmd"/>
+    <remap from="~set_state" to="set_state"/>
     <param name="initial_position/x" value="$(arg initial_position/x)"/>
     <param name="initial_position/y" value="$(arg initial_position/y)"/>
     <param name="initial_position/z" value="$(arg initial_position/z)"/>
