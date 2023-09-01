@@ -17,7 +17,6 @@ struct TrajData
   ros::Time start_time_;
   int dim_;
 
-
   traj_opt::Trajectory2D traj_2d_;
   traj_opt::Trajectory3D traj_3d_;
   traj_opt::Trajectory4D traj_with_yaw_;
@@ -27,10 +26,8 @@ struct TrajData
   traj_opt::DiscreteStates traj_discrete_;
 };
 
-
 class PolyTracker : public kr_trackers_manager::Tracker
 {
-  
  public:
   PolyTracker(void);
 
@@ -61,7 +58,7 @@ class PolyTracker : public kr_trackers_manager::Tracker
 
   bool pos_set_, goal_set_, goal_reached_, active_;
   bool traj_set_ = false;
-  bool yaw_set_  = false;
+  bool yaw_set_ = false;
 
   std::shared_ptr<TrajData> current_trajectory_, next_trajectory_;
 
@@ -70,15 +67,17 @@ class PolyTracker : public kr_trackers_manager::Tracker
   double init_final_yaw_, init_dyaw_, init_yaw_time_;
   ros::Time time_last_;
 
-
   /*** parameters ***/
   double time_forward_ = 1.5;
   double max_dyaw_ = 0.5 * M_PI;
   double max_ddyaw_ = M_PI;
 
+  // calc track error
+  kr_tracker_msgs::PolyTrackerResult result_;
+  double tracking_error_ = 0.0;
+
   std::pair<double, double> calculate_yaw(Eigen::Vector3d &dir, double dt);
   double range(double angle);
-
 };
 
 PolyTracker::PolyTracker(void) : pos_set_(false), goal_set_(false), goal_reached_(false), active_(false) {}
@@ -94,8 +93,7 @@ void PolyTracker::Initialize(const ros::NodeHandle &nh)
   tracker_server_->start();
 
   current_trajectory_.reset(new TrajData);
-  next_trajectory_.reset(new TrajData);  
-
+  next_trajectory_.reset(new TrajData);
 }
 
 bool PolyTracker::Activate(const kr_mav_msgs::PositionCommand::ConstPtr &cmd)
@@ -112,6 +110,7 @@ bool PolyTracker::Activate(const kr_mav_msgs::PositionCommand::ConstPtr &cmd)
     active_ = true;
     ROS_WARN("TrajectoryTracker::Activate: !");
   }
+  tracking_error_ = 0.0;
   return active_;
 }
 
@@ -146,6 +145,8 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
 {
   pos_set_ = true;
 
+  bool traj_time_finished = false;
+
   cur_pos_(0) = msg->pose.pose.position.x;
   cur_pos_(1) = msg->pose.pose.position.y;
   cur_pos_(2) = msg->pose.pose.position.z;
@@ -165,8 +166,7 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
   Eigen::Vector3d pos(Eigen::Vector3d::Zero()), vel(Eigen::Vector3d::Zero()), acc(Eigen::Vector3d::Zero());
   std::pair<double, double> yaw_yawdot(last_yaw_, 0.0);
   Eigen::VectorXd wp(current_trajectory_->dim_), dwp(current_trajectory_->dim_), ddwp(current_trajectory_->dim_);
-
-  // safety 
+  // safety
   if(have_last_goal_ && (cur_pos_ - last_goal_).norm() <= 0.3)
   {
     pos = last_goal_;
@@ -176,7 +176,7 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
     pos = last_pos_;
   }
 
-  if(yaw_set_) // 1. rotate yaw mode
+  if(yaw_set_)  // 1. rotate yaw mode
   {
     double dyaw = range(init_final_yaw_ - cur_yaw_);
 
@@ -199,7 +199,6 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
   }
   else if(traj_set_)
   {
-
     if(next_trajectory_ != NULL && (time_now - next_trajectory_->start_time_).toSec() >= 0.0)
     {
       current_trajectory_ = next_trajectory_;
@@ -214,23 +213,23 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
       {
         case 1:
         {
-
           Eigen::VectorXd cur_state = current_trajectory_->traj_discrete_.getState(t_cur);
           pos = cur_state.head(3);
           vel = cur_state.segment(3, 3);
           acc = cur_state.tail(3);
 
           /*** calculate yaw ***/
-          Eigen::Vector3d dir = t_cur + time_forward_ <= current_trajectory_->traj_dur_ ? 
-                                                          current_trajectory_->traj_discrete_.getNextPos(t_cur + time_forward_) - pos :
-                                                          current_trajectory_->traj_discrete_.getNextPos(current_trajectory_->traj_dur_) - pos;
+          Eigen::Vector3d dir =
+              t_cur + time_forward_ <= current_trajectory_->traj_dur_ ?
+                  current_trajectory_->traj_discrete_.getNextPos(t_cur + time_forward_) - pos :
+                  current_trajectory_->traj_discrete_.getNextPos(current_trajectory_->traj_dur_) - pos;
           yaw_yawdot = calculate_yaw(dir, (time_now - time_last_).toSec());
 
           break;
         }
         case 2:
         {
-          wp  = current_trajectory_->traj_2d_.getPos(t_cur);
+          wp = current_trajectory_->traj_2d_.getPos(t_cur);
           dwp = current_trajectory_->traj_2d_.getVel(t_cur);
           pos.head(2) = wp;
           pos(2) = last_goal_(2);
@@ -251,9 +250,9 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
           else
           {
             /*** calculate yaw ***/
-            Eigen::Vector3d dir = t_cur + time_forward_ <= current_trajectory_->traj_dur_ ? 
-                                                            current_trajectory_->traj_3d_.getPos(t_cur + time_forward_) - pos :
-                                                            current_trajectory_->traj_3d_.getPos(current_trajectory_->traj_dur_) - pos;
+            Eigen::Vector3d dir = t_cur + time_forward_ <= current_trajectory_->traj_dur_ ?
+                                      current_trajectory_->traj_3d_.getPos(t_cur + time_forward_) - pos :
+                                      current_trajectory_->traj_3d_.getPos(current_trajectory_->traj_dur_) - pos;
             yaw_yawdot = calculate_yaw(dir, (time_now - time_last_).toSec());
           }
 
@@ -261,8 +260,8 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
         }
         case 4:
         {
-          wp   = current_trajectory_->traj_with_yaw_.getPos(t_cur);
-          dwp  = current_trajectory_->traj_with_yaw_.getVel(t_cur);
+          wp = current_trajectory_->traj_with_yaw_.getPos(t_cur);
+          dwp = current_trajectory_->traj_with_yaw_.getVel(t_cur);
           ddwp = current_trajectory_->traj_with_yaw_.getAcc(t_cur);
 
           pos = wp.head(3);
@@ -272,7 +271,6 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
           yaw_yawdot.first = wp(3);
           yaw_yawdot.second = range(dwp(3));
 
-
           break;
         }
       }
@@ -280,13 +278,14 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
     }
     else
     {
+      traj_time_finished = true;
       pos = last_pos_;
       last_goal_ = pos;
       have_last_goal_ = true;
       // finish executing the trajectory
       if(t_cur <= current_trajectory_->traj_yaw_dur_ && current_trajectory_->has_solo_yaw_traj_)
       {
-        yaw_yawdot.first  = current_trajectory_->traj_yaw_.getPos(t_cur)(0);
+        yaw_yawdot.first = current_trajectory_->traj_yaw_.getPos(t_cur)(0);
         yaw_yawdot.second = range(current_trajectory_->traj_yaw_.getVel(t_cur)(0));
       }
       else
@@ -296,7 +295,6 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
         traj_set_ = false;
       }
     }
-
   }
 
   // publish the command
@@ -315,7 +313,16 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
   position_cmd_.yaw_dot = yaw_yawdot.second;
 
   time_last_ = time_now;
-  last_yaw_  = yaw_yawdot.first;
+  last_yaw_ = yaw_yawdot.first;
+  tracking_error_ += (cur_pos_ - pos).norm();
+  if(traj_time_finished)
+  {
+    result_.total_distance_travelled = 0.0;  // TODO find this!
+    result_.total_time = current_trajectory_->traj_dur_;
+    result_.total_tracking_error = tracking_error_;
+    tracker_server_->setSucceeded(result_);
+    // compile a result and send it back
+  }
 
   return kr_mav_msgs::PositionCommand::ConstPtr(new kr_mav_msgs::PositionCommand(position_cmd_));
 }
@@ -373,32 +380,32 @@ void PolyTracker::goal_callback()
     yaw_set_ = true;
     init_yaw_time_ = 0.0;
   }
-  else if(msg->seg_x.size() > 0 || msg->knots.size() > 0)     // continuous trajectory
+  else if(msg->seg_x.size() > 0 || msg->knots.size() > 0)  // continuous trajectory
   {
     goal_set_ = true;
     goal_reached_ = false;
-   
-    double total_duration = 0.0; 
+
+    double total_duration = 0.0;
     double total_yaw_duration = 0.0;  // always larger than normal trajectory time
     std::vector<traj_opt::Piece<1>> segs_1d;
     std::vector<traj_opt::Piece<2>> segs_2d;
     std::vector<traj_opt::Piece<3>> segs_3d;
     std::vector<traj_opt::Piece<4>> segs_4d;
-    next_trajectory_.reset(new TrajData);  
+    next_trajectory_.reset(new TrajData);
 
-
-    if (msg->cpts_status == 1)
+    if(msg->cpts_status == 1)
     {
       // not implement now
       ROS_INFO("PolyTracker: not implement now");
       return;
     }
-    else if (msg->cpts_status == 2) // bspline only support 3d or 3d with yaw
+    else if(msg->cpts_status == 2)  // bspline only support 3d or 3d with yaw
     {
       if(msg->yaw_pts.size() <= 0)
       {
         next_trajectory_->dim_ = 3;
-      }else
+      }
+      else
       {
         next_trajectory_->dim_ = 4;
       }
@@ -408,7 +415,7 @@ void PolyTracker::goal_callback()
       size_t degree = M - N - 1;
 
       Eigen::MatrixXd pos_pts(N + 1, next_trajectory_->dim_);  // N + 1
-      Eigen::VectorXd knots(M);              // N + degree + 1
+      Eigen::VectorXd knots(M);                                // N + degree + 1
 
       for(size_t i = 0; i < M; ++i)
       {
@@ -426,7 +433,7 @@ void PolyTracker::goal_callback()
         for(size_t i = 0; i < M - 2 * degree; i++)
         {
           Eigen::MatrixXd cpts(degree + 1, next_trajectory_->dim_);
-          
+
           for(size_t j = 0; j <= degree; j++)
           {
             cpts.row(j) = pos_pts.row(i + j);
@@ -461,9 +468,8 @@ void PolyTracker::goal_callback()
           total_duration += dt;
         }
       }
-
-      
-    }else // polynomials
+    }
+    else  // polynomials
     {
       size_t deg = msg->seg_x[0].degree;
       // decide the dimension
@@ -479,7 +485,7 @@ void PolyTracker::goal_callback()
       {
         next_trajectory_->dim_ = 3;
         next_trajectory_->has_solo_yaw_traj_ = true;
-        
+
         for(size_t i = 0; i < msg->seg_yaw.size(); ++i)
         {
           Eigen::MatrixXd Coeffs_yaw(1, deg + 1);
@@ -492,10 +498,9 @@ void PolyTracker::goal_callback()
           traj_opt::Piece<1> seg(traj_opt::STANDARD, Coeffs_yaw, dt);
           segs_1d.push_back(seg);
         }
-        next_trajectory_->traj_yaw_      = traj_opt::Trajectory1D(segs_1d, total_yaw_duration);
-        next_trajectory_->traj_yaw_dur_  = total_yaw_duration;
+        next_trajectory_->traj_yaw_ = traj_opt::Trajectory1D(segs_1d, total_yaw_duration);
+        next_trajectory_->traj_yaw_dur_ = total_yaw_duration;
       }
-
 
       // set up the trajectory
       for(size_t i = 0; i < msg->seg_x.size(); ++i)
@@ -541,10 +546,10 @@ void PolyTracker::goal_callback()
         }
       }
     }
-  
+
     /* Store data */
     next_trajectory_->start_time_ = msg->t_start;
-    next_trajectory_->traj_dur_   = total_duration;
+    next_trajectory_->traj_dur_ = total_duration;
 
     switch(next_trajectory_->dim_)
     {
@@ -562,27 +567,25 @@ void PolyTracker::goal_callback()
 
     ROS_INFO("PolyTracker: Set the poly trajectory");
   }
-  else if  (msg->vel_pts.size() > 0) 
+  else if(msg->vel_pts.size() > 0)
   {
-
     double interval = msg->dt;
     int Num = msg->N;
     std::vector<Eigen::VectorXd> discrete_states;
     for(size_t j = 0; j < Num; ++j)
     {
       Eigen::VectorXd state(9);
-      
-      state << msg->pos_pts[j].x, msg->pos_pts[j].y, msg->pos_pts[j].z,
-               msg->vel_pts[j].x, msg->vel_pts[j].y, msg->vel_pts[j].z,
-               msg->acc_pts[j].x, msg->acc_pts[j].y, msg->acc_pts[j].z;
+
+      state << msg->pos_pts[j].x, msg->pos_pts[j].y, msg->pos_pts[j].z, msg->vel_pts[j].x, msg->vel_pts[j].y,
+          msg->vel_pts[j].z, msg->acc_pts[j].x, msg->acc_pts[j].y, msg->acc_pts[j].z;
 
       discrete_states.push_back(state);
     }
 
     next_trajectory_->traj_discrete_ = traj_opt::DiscreteStates(interval, Num, discrete_states);
-    next_trajectory_->dim_ = 1; // set discrete mode
+    next_trajectory_->dim_ = 1;  // set discrete mode
     next_trajectory_->start_time_ = msg->t_start;
-    next_trajectory_->traj_dur_   = interval * (Num-1);
+    next_trajectory_->traj_dur_ = interval * (Num - 1);
 
     traj_set_ = true;
 
@@ -623,8 +626,6 @@ std::pair<double, double> PolyTracker::calculate_yaw(Eigen::Vector3d &dir, doubl
   double d_yaw;
 
   d_yaw = range(yaw_temp - last_yaw_);
-
-
 
   const double YDM = d_yaw >= 0 ? max_dyaw_ : -max_dyaw_;
   const double YDDM = d_yaw >= 0 ? max_ddyaw_ : -max_ddyaw_;
