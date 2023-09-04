@@ -93,7 +93,7 @@ QuadrotorSimulatorSO3::ControlInput QuadrotorSimulatorSO3::getControl(const Quad
                               Rd23 * R23 + Rd33 * R33));
 
   if(Psi > 1.0f)  // Position control stability guaranteed only when Psi < 1
-    ROS_WARN_THROTTLE(1, "Warning Psi = %f > 1", Psi);
+    ROS_WARN_THROTTLE(5, "Warning Psi = %f > 1", Psi);
 
   float force = cmd.force[0] * R13 + cmd.force[1] * R23 + cmd.force[2] * R33;
 

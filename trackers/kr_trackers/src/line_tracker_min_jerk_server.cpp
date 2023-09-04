@@ -107,6 +107,12 @@ bool LineTrackerMinJerk::Activate(const kr_mav_msgs::PositionCommand::ConstPtr &
 
     current_traj_length_ = 0.0;
   }
+  else
+  {
+    ROS_WARN_STREAM("LineTrackerMinJerk::Activate: goal_set_ is "
+                    << goal_set_ << " and pos_set_ is " << pos_set_
+                    << " - not activating. Did you wait for a second after setting goal");
+  }
   return active_;
 }
 

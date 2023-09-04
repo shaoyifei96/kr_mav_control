@@ -1,10 +1,12 @@
 #include <actionlib/server/simple_action_server.h>
+#include <geometry_msgs/Point.h>
 #include <kr_tracker_msgs/PolyTrackerAction.h>
 #include <kr_tracker_msgs/TrackerStatus.h>
 #include <kr_trackers/initial_conditions.h>
 #include <kr_trackers_manager/Tracker.h>
 #include <ros/ros.h>
 #include <tf/transform_datatypes.h>
+// #include <eigen_conversions/eigen_msg.h>
 
 #include <Eigen/Eigen>
 #include <traj_data.hpp>
@@ -75,6 +77,9 @@ class PolyTracker : public kr_trackers_manager::Tracker
   // calc track error
   kr_tracker_msgs::PolyTrackerResult result_;
   double tracking_error_ = 0.0;
+  uint number_of_tracking_error_ = 0;
+  std::vector<Eigen::Vector3d> odom_hist_;
+  bool success_sent_ = false;
 
   std::pair<double, double> calculate_yaw(Eigen::Vector3d &dir, double dt);
   double range(double angle);
@@ -111,6 +116,10 @@ bool PolyTracker::Activate(const kr_mav_msgs::PositionCommand::ConstPtr &cmd)
     ROS_WARN("TrajectoryTracker::Activate: !");
   }
   tracking_error_ = 0.0;
+  number_of_tracking_error_ = 0;
+  result_.odom_history.clear();
+  odom_hist_.clear();
+  success_sent_ = false;
   return active_;
 }
 
@@ -315,12 +324,23 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
   time_last_ = time_now;
   last_yaw_ = yaw_yawdot.first;
   tracking_error_ += (cur_pos_ - pos).norm();
-  if(traj_time_finished)
+  number_of_tracking_error_++;
+  odom_hist_.push_back(cur_pos_);
+  if(traj_time_finished && !success_sent_)  // not sure if i need success sent flag
   {
     result_.total_distance_travelled = 0.0;  // TODO find this!
     result_.total_time = current_trajectory_->traj_dur_;
-    result_.total_tracking_error = tracking_error_;
+    result_.total_tracking_error = tracking_error_ / number_of_tracking_error_;
+    for(auto &p : odom_hist_)
+    {
+      geometry_msgs::Point m;
+      m.x = p(0);
+      m.y = p(1);
+      m.z = p(2);
+      result_.odom_history.push_back(m);
+    }
     tracker_server_->setSucceeded(result_);
+    success_sent_ = true;
     // compile a result and send it back
   }
 
