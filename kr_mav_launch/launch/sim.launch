@@ -15,7 +15,7 @@
   <arg name="initial_orientation/w" default="1.0"/>
   <arg name="initial_yaw" default="10.0"/>
 
-
+  <arg name="gravity"    default="9.81"/>
 
   <arg name="color/r" default="0.0"/>
   <arg name="color/g" default="0.0"/>
@@ -43,6 +43,7 @@
     <param name="initial_orientation/z" value="$(arg initial_orientation/z)"/>
     <param name="initial_orientation/w" value="$(arg initial_orientation/w)"/>
     <param name="initial_yaw" value="$(arg initial_yaw)"/>
+    <param name="gravity"     value="$(arg gravity)"/>
 
   </node>
 
