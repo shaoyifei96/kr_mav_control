@@ -1,7 +1,16 @@
 <launch>
   <arg name="mav_name" default="quadrotor"/>
   <arg name="mav_type" default="hummingbird"/>
+
   <arg name="mass" default="0.5"/>
+  <arg name="gravity"    default="9.81"/>
+  <arg name='Ixx' default="0.0023"/>
+  <arg name='Iyy' default="0.0023"/>
+  <arg name='Izz' default="0.0046"/>
+  <arg name='arm_length' default="0.17"/>
+  <arg name='kf' default="1.0"/>
+  <arg name='km' default="0.0245"/>
+
   <arg name="world_frame_id" default="simulator"/>
   <arg name="odom_topic" default="odom"/>
   <arg name="rate/odom" default="100"/>
@@ -15,7 +24,7 @@
   <arg name="initial_orientation/w" default="1.0"/>
   <arg name="initial_yaw" default="10.0"/>
 
-  <arg name="gravity"    default="9.81"/>
+
 
   <arg name="color/r" default="0.0"/>
   <arg name="color/g" default="0.0"/>
@@ -30,7 +39,15 @@
     <param name="world_frame_id" value="$(arg world_frame_id)"/>
     <param name="quadrotor_name" value="$(arg mav_name)"/>
     <param name="rate/odom" value="$(arg rate/odom)"/>
+
     <param name="mass" value="$(arg mass)"/>
+    <!-- <param name="Ixx" value="$(arg Ixx)"/>
+    <param name="Iyy" value="$(arg Iyy)"/>
+    <param name="Izz" value="$(arg Izz)"/>
+    <param name="arm_length" value="$(arg arm_length)"/>
+    <param name="thrust_coefficient" value="$(arg kf)"/> -->
+    <!-- <param name="moment_coefficient" value="$(arg km)"/>  -->
+    
     <remap from="~odom" to="$(arg odom_topic)"/>
     <remap from="~imu" to="imu"/>
     <remap from="~cmd" to="so3_cmd"/>

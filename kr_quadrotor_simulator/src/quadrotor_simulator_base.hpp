@@ -111,6 +111,13 @@ QuadrotorSimulatorBase<T, U>::QuadrotorSimulatorBase(ros::NodeHandle &n)
   quad_.setGravity(get_param("gravity"));
   quad_.setPropRadius(get_param("prop_radius"));
   quad_.setPropellerThrustCoefficient(get_param("thrust_coefficient"));
+  if(n.hasParam("moment_coefficient"))
+  {
+    ROS_INFO("Getting moment coefficient = %f", quad_.getPropellerMomentCoefficient());
+    double moment_coefficient = get_param("moment_coefficient");
+    ROS_INFO("Setting moment coefficient to %f", moment_coefficient);
+    quad_.setPropellerMomentCoefficient(moment_coefficient);  // may not have this in regular launch
+  }
   quad_.setArmLength(get_param("arm_length"));
   quad_.setMotorTimeConstant(get_param("motor_time_constant"));
   quad_.setMinRPM(get_param("min_rpm"));
