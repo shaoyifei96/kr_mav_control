@@ -115,11 +115,6 @@ bool PolyTracker::Activate(const kr_mav_msgs::PositionCommand::ConstPtr &cmd)
     active_ = true;
     ROS_WARN("TrajectoryTracker::Activate: !");
   }
-  tracking_error_ = 0.0;
-  number_of_tracking_error_ = 0;
-  result_.odom_history.clear();
-  odom_hist_.clear();
-  success_sent_ = false;
   return active_;
 }
 
@@ -182,6 +177,9 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
   }
   else
   {
+    ROS_ERROR_STREAM_THROTTLE(2, "PolyTracker: Jump in position Command! cur_pos_ = "
+                                     << cur_pos_(0) << " " << cur_pos_(1) << " " << cur_pos_(2) << " last_goal_ = "
+                                     << last_goal_(0) << " " << last_goal_(1) << " " << last_goal_(2));
     pos = last_pos_;
   }
 
@@ -349,6 +347,11 @@ kr_mav_msgs::PositionCommand::ConstPtr PolyTracker::update(const nav_msgs::Odome
 
 void PolyTracker::goal_callback()
 {
+  tracking_error_ = 0.0;
+  number_of_tracking_error_ = 0;
+  result_.odom_history.clear();
+  odom_hist_.clear();
+  success_sent_ = false;
   // If another goal is already active, cancel that goal and track this one instead.
   if(tracker_server_->isActive())
   {

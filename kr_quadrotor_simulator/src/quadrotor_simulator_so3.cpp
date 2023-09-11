@@ -59,7 +59,7 @@ QuadrotorSimulatorSO3::ControlInput QuadrotorSimulatorSO3::getControl(const Quad
   const double _km = quad.getPropellerMomentCoefficient();
   const double kf = _kf - cmd.kf_correction;
   const double km = _km / _kf * kf;
-  ROS_INFO_THROTTLE(10, "getControl: kf: %f, km: %f", kf, km);
+  // ROS_INFO_THROTTLE(10, "getControl: kf: %f, km: %f", kf, km);
 
   const double d = quad.getArmLength();
   const Eigen::Matrix3f J = quad.getInertia().cast<float>();
